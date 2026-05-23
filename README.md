@@ -2,6 +2,8 @@
 
 Simply Scroll is a lightweight scroll state preservation plugin for Obsidian. It restores your exact reading scroll position when switching between Markdown files with **zero layout shifting, zero focus fighting, and absolutely zero visual flashing**.
 
+QQ交流群:599796635
+
 [简体中文说明](#简体中文)
 
 ---
