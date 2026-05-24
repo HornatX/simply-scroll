@@ -45,13 +45,26 @@ var SimplyScrollPlugin = class extends import_obsidian.Plugin {
   async onload() {
     await this.loadAndCleanData();
     const plugin = this;
+    const styleEl = document.createElement("style");
+    styleEl.id = "simply-scroll-cursor-hider";
+    styleEl.textContent = `
+            .simply-scroll-cloaked .cm-cursorLayer,
+            .simply-scroll-cloaked .cm-selectionLayer {
+                display: none !important;
+                opacity: 0 !important;
+            }
+            .simply-scroll-cloaked {
+                caret-color: transparent !important;
+            }
+        `;
+    document.head.appendChild(styleEl);
     const unpatch = around(import_obsidian.WorkspaceLeaf.prototype, {
       setViewState(next) {
         return async function(state, eState) {
           if (state.type === "markdown" && state.state?.file) {
             const path = state.state.file;
             const saved = plugin.data[path];
-            if (saved > 5 && (!state.state || !state.state.subpath)) {
+            if (saved > 0 && (!state.state || !state.state.subpath)) {
               const leaf = this;
               eState = Object.assign({}, eState || {});
               eState.scroll = saved;
@@ -63,12 +76,14 @@ var SimplyScrollPlugin = class extends import_obsidian.Plugin {
               if (contentEl) {
                 contentEl.style.transition = "none";
                 contentEl.style.opacity = "0";
+                leaf.view.containerEl.classList.add("simply-scroll-cloaked");
                 isCloaked = true;
               }
               const restoreUI = () => {
                 if (!isCloaked) return;
                 isCloaked = false;
                 if (leaf.view?.contentEl) {
+                  leaf.view.containerEl.classList.remove("simply-scroll-cloaked");
                   leaf.view.contentEl.style.transition = "opacity 0.05s ease-out";
                   leaf.view.contentEl.style.opacity = "1";
                   setTimeout(() => {
@@ -83,7 +98,7 @@ var SimplyScrollPlugin = class extends import_obsidian.Plugin {
                 const result = await next.call(this, state, eState);
                 if (contentEl) {
                   const startTime = Date.now();
-                  const fightDuration = 40;
+                  const fightDuration = 100;
                   const fightInterval = setInterval(() => {
                     const activeEl = document.activeElement;
                     if (activeEl && leaf.view.containerEl.contains(activeEl)) {
@@ -100,7 +115,7 @@ var SimplyScrollPlugin = class extends import_obsidian.Plugin {
                   setTimeout(() => {
                     clearInterval(fightInterval);
                     restoreUI();
-                  }, 150);
+                  }, 200);
                 } else {
                   restoreUI();
                 }
@@ -187,6 +202,8 @@ var SimplyScrollPlugin = class extends import_obsidian.Plugin {
     });
   }
   async onunload() {
+    const styleEl = document.getElementById("simply-scroll-cursor-hider");
+    if (styleEl) styleEl.remove();
     if (this.requestDiskSave && this.requestDiskSave.cancel) {
       this.requestDiskSave.cancel();
     }
