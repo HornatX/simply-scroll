@@ -98,7 +98,7 @@ var SimplyScrollPlugin = class extends import_obsidian.Plugin {
                 const result = await next.call(this, state, eState);
                 if (contentEl) {
                   const startTime = Date.now();
-                  const fightDuration = 100;
+                  const fightDuration = 20;
                   const fightInterval = setInterval(() => {
                     const activeEl = document.activeElement;
                     if (activeEl && leaf.view.containerEl.contains(activeEl)) {

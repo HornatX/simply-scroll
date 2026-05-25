@@ -132,7 +132,7 @@ export default class SimplyScrollPlugin extends Plugin {
                                     const startTime = Date.now();
                                     // 🌟 核心改进 3：将压制时间从 40ms 延长至 100ms
                                     // 因为 CodeMirror 渲染文本和计算光标有延迟，多按住一会防止它反扑
-                                    const fightDuration = 100; 
+                                    const fightDuration = 20; 
                                     
                                     const fightInterval = setInterval(() => {
                                         // 疯狂没收焦点，只要光标拿不到焦点，它就无法强制滚动视口
