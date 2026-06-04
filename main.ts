@@ -53,12 +53,20 @@ export default class SimplyScrollPlugin extends Plugin {
     data: SimplyScrollData = {};
     scrollDebouncers: WeakMap<HTMLElement, () => void> = new WeakMap();
     requestDiskSave!: ReturnType<typeof debounce>;
+    
+    // 状态标记：用来区分是“冷启动”还是“日常切换”
+    isAppReady: boolean = false; 
 
     async onload() {
         await this.loadAndCleanData();
         const plugin = this;
 
-        // 🌟 核心改进 1：动态注入 CSS，用于在加载瞬间彻底隐藏光标
+        // 监听应用真正加载完毕，切换为“日常极速模式”
+        this.app.workspace.onLayoutReady(() => {
+            this.isAppReady = true;
+        });
+
+        // 🌟 动态注入 CSS
         const styleEl = document.createElement('style');
         styleEl.id = 'simply-scroll-cursor-hider';
         styleEl.textContent = `
@@ -73,7 +81,7 @@ export default class SimplyScrollPlugin extends Plugin {
         `;
         document.head.appendChild(styleEl);
 
-        // --- 第一部分：终极隐身斗篷策略 (针对光标抢夺优化版) ---
+        // --- 第一部分：终极隐身斗篷策略 (双轨分支版) ---
         const unpatch = around(WorkspaceLeaf.prototype, {
             setViewState(next: Function) {
                 return async function (this: ExtendedWorkspaceLeaf, state: ViewState, eState?: any) {
@@ -81,39 +89,32 @@ export default class SimplyScrollPlugin extends Plugin {
                         const path = state.state.file as string;
                         const saved = plugin.data[path];
 
-                        // 🌟 核心改进 2：将 saved > 5 改为 saved > 0。打破前几行不记录的魔咒！
                         if (saved > 0 && (!state.state || !state.state.subpath)) {
                             const leaf = this;
                             eState = Object.assign({}, eState || {}); 
                             eState.scroll = saved;
                             delete eState.line;
                             delete eState.cursor;
-                            eState.focus = false; // 告诉 Obsidian 不要聚焦
+                            eState.focus = false;
 
                             const contentEl = leaf.view?.contentEl;
                             let isCloaked = false;
 
-                            // 🌟 1. 挂载隐身斗篷 & 隐藏光标
+                            // 1. 统一挂载隐身斗篷
                             if (contentEl) {
                                 contentEl.style.transition = 'none';
                                 contentEl.style.opacity = '0';
-                                // 添加类名，触发刚才注入的 CSS，瞬间抹除光标
                                 leaf.view.containerEl.classList.add('simply-scroll-cloaked');
                                 isCloaked = true;
                             }
 
-                            // 安全恢复 UI 的闭包函数，防止卡死
                             const restoreUI = () => {
                                 if (!isCloaked) return;
                                 isCloaked = false;
-                                
                                 if (leaf.view?.contentEl) {
-                                    // 撤销光标隐藏
                                     leaf.view.containerEl.classList.remove('simply-scroll-cloaked');
-                                    
                                     leaf.view.contentEl.style.transition = 'opacity 0.05s ease-out';
                                     leaf.view.contentEl.style.opacity = '1';
-                                    
                                     setTimeout(() => {
                                         if (leaf.view?.contentEl?.style.opacity === '1') {
                                             leaf.view.contentEl.style.transition = '';
@@ -127,37 +128,69 @@ export default class SimplyScrollPlugin extends Plugin {
                                 // 执行原生的打开逻辑
                                 const result = await next.call(this, state, eState);
 
-                                // 🌟 2. 极速镇压（针对 CodeMirror 延迟渲染优化）
+                                // 🌟 2. 核心分支：区分冷启动与日常切换
                                 if (contentEl) {
                                     const startTime = Date.now();
-                                    // 🌟 核心改进 3：将压制时间从 40ms 延长至 100ms
-                                    // 因为 CodeMirror 渲染文本和计算光标有延迟，多按住一会防止它反扑
-                                    const fightDuration = 20; 
-                                    
-                                    const fightInterval = setInterval(() => {
-                                        // 疯狂没收焦点，只要光标拿不到焦点，它就无法强制滚动视口
-                                        const activeEl = document.activeElement as HTMLElement | null;
-                                        if (activeEl && leaf.view.containerEl.contains(activeEl)) {
-                                            activeEl.blur();
-                                        }
-                                        
-                                        // 持续应用我们保存的滚动条位置
-                                        if (leaf.view.currentMode && leaf.view.currentMode.applyScroll) {
-                                            leaf.view.currentMode.applyScroll(saved);
-                                        }
-                                        
-                                        // 时间到达后立刻撤退并恢复 UI
-                                        if (Date.now() - startTime >= fightDuration) { 
+
+                                    if (!plugin.isAppReady) {
+                                        // =====================================================
+                                        // 🚀 分支 A：冷启动（重启）逻辑 - 长效镇压防止偏移
+                                        // =====================================================
+                                        const fightDuration = 600; 
+                                        let animationFrameId: number;
+
+                                        const fightLoop = () => {
+                                            const elapsed = Date.now() - startTime;
+                                            
+                                            const activeEl = document.activeElement as HTMLElement | null;
+                                            if (activeEl && leaf.view.containerEl.contains(activeEl)) {
+                                                activeEl.blur();
+                                            }
+                                            
+                                            if (leaf.view.currentMode && leaf.view.currentMode.applyScroll) {
+                                                leaf.view.currentMode.applyScroll(saved);
+                                            }
+
+                                            if (elapsed < fightDuration) {
+                                                animationFrameId = requestAnimationFrame(fightLoop);
+                                            } else {
+                                                if (leaf.view.currentMode && leaf.view.currentMode.applyScroll) {
+                                                    leaf.view.currentMode.applyScroll(saved);
+                                                }
+                                                cancelAnimationFrame(animationFrameId);
+                                                restoreUI();
+                                            }
+                                        };
+                                        animationFrameId = requestAnimationFrame(fightLoop);
+
+                                    } else {
+                                        // =====================================================
+                                        // ⚡️ 分支 B：日常切换逻辑 - 恢复最初原版的高速 setInterval
+                                        // =====================================================
+                                        const fightDuration = 20; 
+                                        const fightInterval = setInterval(() => {
+                                            const activeEl = document.activeElement as HTMLElement | null;
+                                            if (activeEl && leaf.view.containerEl.contains(activeEl)) {
+                                                activeEl.blur();
+                                            }
+                                            
+                                            if (leaf.view.currentMode && leaf.view.currentMode.applyScroll) {
+                                                leaf.view.currentMode.applyScroll(saved);
+                                            }
+                                            
+                                            if (Date.now() - startTime >= fightDuration) { 
+                                                clearInterval(fightInterval);
+                                                restoreUI();
+                                            }
+                                        }, 5);
+
+                                        // 绝对保底机制
+                                        setTimeout(() => {
                                             clearInterval(fightInterval);
                                             restoreUI();
-                                        }
-                                    }, 5);
+                                        }, 200);
+                                    }
 
-                                    // 绝对保底机制
-                                    setTimeout(() => {
-                                        clearInterval(fightInterval);
-                                        restoreUI();
-                                    }, 200);
                                 } else {
                                     restoreUI();
                                 }

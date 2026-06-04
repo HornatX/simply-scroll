@@ -41,10 +41,15 @@ var SimplyScrollPlugin = class extends import_obsidian.Plugin {
     super(...arguments);
     this.data = {};
     this.scrollDebouncers = /* @__PURE__ */ new WeakMap();
+    // 状态标记：用来区分是“冷启动”还是“日常切换”
+    this.isAppReady = false;
   }
   async onload() {
     await this.loadAndCleanData();
     const plugin = this;
+    this.app.workspace.onLayoutReady(() => {
+      this.isAppReady = true;
+    });
     const styleEl = document.createElement("style");
     styleEl.id = "simply-scroll-cursor-hider";
     styleEl.textContent = `
@@ -98,24 +103,49 @@ var SimplyScrollPlugin = class extends import_obsidian.Plugin {
                 const result = await next.call(this, state, eState);
                 if (contentEl) {
                   const startTime = Date.now();
-                  const fightDuration = 20;
-                  const fightInterval = setInterval(() => {
-                    const activeEl = document.activeElement;
-                    if (activeEl && leaf.view.containerEl.contains(activeEl)) {
-                      activeEl.blur();
-                    }
-                    if (leaf.view.currentMode && leaf.view.currentMode.applyScroll) {
-                      leaf.view.currentMode.applyScroll(saved);
-                    }
-                    if (Date.now() - startTime >= fightDuration) {
+                  if (!plugin.isAppReady) {
+                    const fightDuration = 600;
+                    let animationFrameId;
+                    const fightLoop = () => {
+                      const elapsed = Date.now() - startTime;
+                      const activeEl = document.activeElement;
+                      if (activeEl && leaf.view.containerEl.contains(activeEl)) {
+                        activeEl.blur();
+                      }
+                      if (leaf.view.currentMode && leaf.view.currentMode.applyScroll) {
+                        leaf.view.currentMode.applyScroll(saved);
+                      }
+                      if (elapsed < fightDuration) {
+                        animationFrameId = requestAnimationFrame(fightLoop);
+                      } else {
+                        if (leaf.view.currentMode && leaf.view.currentMode.applyScroll) {
+                          leaf.view.currentMode.applyScroll(saved);
+                        }
+                        cancelAnimationFrame(animationFrameId);
+                        restoreUI();
+                      }
+                    };
+                    animationFrameId = requestAnimationFrame(fightLoop);
+                  } else {
+                    const fightDuration = 20;
+                    const fightInterval = setInterval(() => {
+                      const activeEl = document.activeElement;
+                      if (activeEl && leaf.view.containerEl.contains(activeEl)) {
+                        activeEl.blur();
+                      }
+                      if (leaf.view.currentMode && leaf.view.currentMode.applyScroll) {
+                        leaf.view.currentMode.applyScroll(saved);
+                      }
+                      if (Date.now() - startTime >= fightDuration) {
+                        clearInterval(fightInterval);
+                        restoreUI();
+                      }
+                    }, 5);
+                    setTimeout(() => {
                       clearInterval(fightInterval);
                       restoreUI();
-                    }
-                  }, 5);
-                  setTimeout(() => {
-                    clearInterval(fightInterval);
-                    restoreUI();
-                  }, 200);
+                    }, 200);
+                  }
                 } else {
                   restoreUI();
                 }
