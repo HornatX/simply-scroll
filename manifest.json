@@ -1,7 +1,7 @@
 {
 	"id": "simply-scroll",
 	"name": "Simply Scroll",
-	"version": "1.2.2",
+	"version": "1.2.3",
 	"minAppVersion": "0.15.0",
 	"description": "Only records the scroll position of files, not the cursor position. No flickering, no jumping.",
 	"author": "hornat",

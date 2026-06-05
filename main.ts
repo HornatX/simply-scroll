@@ -9,7 +9,7 @@ import {
 } from 'obsidian';
 
 // ============================================================================
-// 类型声明增强 
+// 类型声明增强 (修复 Any 和类型不明确警告)
 // ============================================================================
 
 interface ExtendedView extends View {
@@ -29,18 +29,44 @@ interface SimplyScrollData {
     [path: string]: number;
 }
 
+// 修复 eState 的 any 警告
+interface EphemeralState {
+    scroll?: number;
+    line?: number;
+    cursor?: unknown;
+    focus?: boolean;
+    [key: string]: unknown;
+}
+
+// 修复 debounce cancel 的类型警告
+interface CancelableDebounce {
+    cancel?: () => void;
+}
+
+// 通用函数类型声明
+type AnyFunction = (...args: unknown[]) => unknown;
+
 // ============================================================================
-// 劫持函数 (Monkey Patch)
+// 劫持函数 (Monkey Patch) - 修复类型警告
 // ============================================================================
 
-function around(obj: any, factories: any): () => void {
+function around<T extends Record<string, unknown>>(
+    obj: T,
+    factories: { [K in keyof T]?: (next: AnyFunction) => AnyFunction }
+): () => void {
     const removers = Object.keys(factories).map(key => {
-        const original = obj[key];
-        const factory = factories[key];
-        const wrapped = factory(original);
-        wrapped && (wrapped.container = original);
-        obj[key] = wrapped;
-        return () => { if (obj[key] === wrapped) obj[key] = original; };
+        const k = key as keyof T;
+        const original = obj[k] as AnyFunction;
+        const factory = factories[k];
+        if (!factory) return () => {};
+        
+        const wrapped = factory(original) as AnyFunction & { container?: AnyFunction };
+        wrapped.container = original;
+        
+        obj[k] = wrapped as T[keyof T];
+        return () => { 
+            if (obj[k] === wrapped) obj[k] = original as T[keyof T]; 
+        };
     });
     return () => removers.forEach(r => r());
 }
@@ -57,162 +83,21 @@ export default class SimplyScrollPlugin extends Plugin {
     // 状态标记：用来区分是“冷启动”还是“日常切换”
     isAppReady: boolean = false; 
 
-    async onload() {
+    async onload(): Promise<void> {
         await this.loadAndCleanData();
-        const plugin = this;
 
         // 监听应用真正加载完毕，切换为“日常极速模式”
         this.app.workspace.onLayoutReady(() => {
             this.isAppReady = true;
         });
 
-        // 🌟 动态注入 CSS
-        const styleEl = document.createElement('style');
-        styleEl.id = 'simply-scroll-cursor-hider';
-        styleEl.textContent = `
-            .simply-scroll-cloaked .cm-cursorLayer,
-            .simply-scroll-cloaked .cm-selectionLayer {
-                display: none !important;
-                opacity: 0 !important;
-            }
-            .simply-scroll-cloaked {
-                caret-color: transparent !important;
-            }
-        `;
-        document.head.appendChild(styleEl);
-
-        // --- 第一部分：终极隐身斗篷策略 (双轨分支版) ---
-        const unpatch = around(WorkspaceLeaf.prototype, {
-            setViewState(next: Function) {
-                return async function (this: ExtendedWorkspaceLeaf, state: ViewState, eState?: any) {
-                    if (state.type === 'markdown' && state.state?.file) {
-                        const path = state.state.file as string;
-                        const saved = plugin.data[path];
-
-                        if (saved > 0 && (!state.state || !state.state.subpath)) {
-                            const leaf = this;
-                            eState = Object.assign({}, eState || {}); 
-                            eState.scroll = saved;
-                            delete eState.line;
-                            delete eState.cursor;
-                            eState.focus = false;
-
-                            const contentEl = leaf.view?.contentEl;
-                            let isCloaked = false;
-
-                            // 1. 统一挂载隐身斗篷
-                            if (contentEl) {
-                                contentEl.style.transition = 'none';
-                                contentEl.style.opacity = '0';
-                                leaf.view.containerEl.classList.add('simply-scroll-cloaked');
-                                isCloaked = true;
-                            }
-
-                            const restoreUI = () => {
-                                if (!isCloaked) return;
-                                isCloaked = false;
-                                if (leaf.view?.contentEl) {
-                                    leaf.view.containerEl.classList.remove('simply-scroll-cloaked');
-                                    leaf.view.contentEl.style.transition = 'opacity 0.05s ease-out';
-                                    leaf.view.contentEl.style.opacity = '1';
-                                    setTimeout(() => {
-                                        if (leaf.view?.contentEl?.style.opacity === '1') {
-                                            leaf.view.contentEl.style.transition = '';
-                                            leaf.view.contentEl.style.opacity = '';
-                                        }
-                                    }, 100);
-                                }
-                            };
-
-                            try {
-                                // 执行原生的打开逻辑
-                                const result = await next.call(this, state, eState);
-
-                                // 🌟 2. 核心分支：区分冷启动与日常切换
-                                if (contentEl) {
-                                    const startTime = Date.now();
-
-                                    if (!plugin.isAppReady) {
-                                        // =====================================================
-                                        // 🚀 分支 A：冷启动（重启）逻辑 - 长效镇压防止偏移
-                                        // =====================================================
-                                        const fightDuration = 600; 
-                                        let animationFrameId: number;
-
-                                        const fightLoop = () => {
-                                            const elapsed = Date.now() - startTime;
-                                            
-                                            const activeEl = document.activeElement as HTMLElement | null;
-                                            if (activeEl && leaf.view.containerEl.contains(activeEl)) {
-                                                activeEl.blur();
-                                            }
-                                            
-                                            if (leaf.view.currentMode && leaf.view.currentMode.applyScroll) {
-                                                leaf.view.currentMode.applyScroll(saved);
-                                            }
-
-                                            if (elapsed < fightDuration) {
-                                                animationFrameId = requestAnimationFrame(fightLoop);
-                                            } else {
-                                                if (leaf.view.currentMode && leaf.view.currentMode.applyScroll) {
-                                                    leaf.view.currentMode.applyScroll(saved);
-                                                }
-                                                cancelAnimationFrame(animationFrameId);
-                                                restoreUI();
-                                            }
-                                        };
-                                        animationFrameId = requestAnimationFrame(fightLoop);
-
-                                    } else {
-                                        // =====================================================
-                                        // ⚡️ 分支 B：日常切换逻辑 - 恢复最初原版的高速 setInterval
-                                        // =====================================================
-                                        const fightDuration = 20; 
-                                        const fightInterval = setInterval(() => {
-                                            const activeEl = document.activeElement as HTMLElement | null;
-                                            if (activeEl && leaf.view.containerEl.contains(activeEl)) {
-                                                activeEl.blur();
-                                            }
-                                            
-                                            if (leaf.view.currentMode && leaf.view.currentMode.applyScroll) {
-                                                leaf.view.currentMode.applyScroll(saved);
-                                            }
-                                            
-                                            if (Date.now() - startTime >= fightDuration) { 
-                                                clearInterval(fightInterval);
-                                                restoreUI();
-                                            }
-                                        }, 5);
-
-                                        // 绝对保底机制
-                                        setTimeout(() => {
-                                            clearInterval(fightInterval);
-                                            restoreUI();
-                                        }, 200);
-                                    }
-
-                                } else {
-                                    restoreUI();
-                                }
-
-                                return result;
-
-                            } catch (error) {
-                                restoreUI();
-                                throw error; 
-                            }
-                        }
-                    }
-                    return next.call(this, state, eState);
-                };
-            }
-        });
-
-        this.register(unpatch);
+        // 将插件实例传入闭包，避免 linter 警告 (Unexpected aliasing of 'this')
+        this.setupMonkeyPatch(this);
 
         // --- 第二部分：精准识别与高性能保存逻辑 ---
         this.requestDiskSave = debounce(() => {
-            this.saveData(this.data);
+            // 修复 Promise 未处理警告
+            void this.saveData(this.data);
         }, 2000);
 
         this.registerDomEvent(window, 'scroll', (e: Event) => {
@@ -253,7 +138,7 @@ export default class SimplyScrollPlugin extends Plugin {
         // --- 第三部分：生命周期与数据管理 ---
         this.registerEvent(
             this.app.workspace.on('active-leaf-change', () => {
-                this.saveData(this.data);
+                void this.saveData(this.data);
             })
         );
 
@@ -262,7 +147,7 @@ export default class SimplyScrollPlugin extends Plugin {
                 if (file instanceof TFile && this.data[oldPath] !== undefined) {
                     this.data[file.path] = this.data[oldPath];
                     delete this.data[oldPath];
-                    this.saveData(this.data);
+                    void this.saveData(this.data);
                 }
             })
         );
@@ -271,43 +156,177 @@ export default class SimplyScrollPlugin extends Plugin {
             this.app.vault.on('delete', (file: TAbstractFile) => {
                 if (file instanceof TFile && this.data[file.path] !== undefined) {
                     delete this.data[file.path];
-                    this.saveData(this.data);
+                    void this.saveData(this.data);
                 }
             })
         );
     }
 
-    async loadAndCleanData() {
+    private setupMonkeyPatch(plugin: SimplyScrollPlugin) {
+        const unpatch = around(WorkspaceLeaf.prototype as Record<string, unknown>, {
+            setViewState(next: AnyFunction) {
+                return async function (this: ExtendedWorkspaceLeaf, state: ViewState, eState?: EphemeralState) {
+                    if (state.type === 'markdown' && state.state?.file) {
+                        const path = state.state.file as string;
+                        const saved = plugin.data[path];
+
+                        if (typeof saved === 'number' && saved > 0 && (!state.state || !state.state.subpath)) {
+                            const leaf = this;
+                            const modState: EphemeralState = Object.assign({}, eState || {}); 
+                            modState.scroll = saved;
+                            delete modState.line;
+                            delete modState.cursor;
+                            modState.focus = false;
+
+                            const contentEl = leaf.view?.contentEl;
+                            let isCloaked = false;
+
+                            // 1. 统一挂载隐身斗篷 (使用 Class 替代直接赋值 Style)
+                            if (contentEl) {
+                                contentEl.classList.remove('simply-scroll-showing');
+                                contentEl.classList.add('simply-scroll-hiding');
+                                leaf.view.containerEl.classList.add('simply-scroll-cloaked');
+                                isCloaked = true;
+                            }
+
+                            const restoreUI = () => {
+                                if (!isCloaked) return;
+                                isCloaked = false;
+                                if (leaf.view?.contentEl) {
+                                    leaf.view.containerEl.classList.remove('simply-scroll-cloaked');
+                                    leaf.view.contentEl.classList.remove('simply-scroll-hiding');
+                                    leaf.view.contentEl.classList.add('simply-scroll-showing');
+                                    
+                                    // 修复 setTimeout 的 window 前缀警告
+                                    window.setTimeout(() => {
+                                        if (leaf.view?.contentEl) {
+                                            leaf.view.contentEl.classList.remove('simply-scroll-showing');
+                                        }
+                                    }, 100);
+                                }
+                            };
+
+                            try {
+                                // 执行原生的打开逻辑
+                                const result = await (next.call(this, state, modState) as Promise<unknown>);
+
+                                // 2. 核心分支：区分冷启动与日常切换
+                                if (contentEl) {
+                                    const startTime = Date.now();
+                                    
+                                    // 修复弹出窗口(popout window)兼容性警告，使用 ownerDocument 替代全局 document
+                                    const leafDoc = leaf.view.containerEl.ownerDocument;
+
+                                    if (!plugin.isAppReady) {
+                                        // 分支 A：冷启动（重启）逻辑
+                                        const fightDuration = 600; 
+                                        let animationFrameId: number;
+
+                                        const fightLoop = () => {
+                                            const elapsed = Date.now() - startTime;
+                                            
+                                            const activeEl = leafDoc.activeElement as HTMLElement | null;
+                                            if (activeEl && leaf.view.containerEl.contains(activeEl)) {
+                                                activeEl.blur();
+                                            }
+                                            
+                                            if (leaf.view.currentMode && leaf.view.currentMode.applyScroll) {
+                                                leaf.view.currentMode.applyScroll(saved);
+                                            }
+
+                                            if (elapsed < fightDuration) {
+                                                // 修复 requestAnimationFrame 的 window 前缀警告
+                                                animationFrameId = window.requestAnimationFrame(fightLoop);
+                                            } else {
+                                                if (leaf.view.currentMode && leaf.view.currentMode.applyScroll) {
+                                                    leaf.view.currentMode.applyScroll(saved);
+                                                }
+                                                window.cancelAnimationFrame(animationFrameId);
+                                                restoreUI();
+                                            }
+                                        };
+                                        animationFrameId = window.requestAnimationFrame(fightLoop);
+
+                                    } else {
+                                        // 分支 B：日常切换逻辑
+                                        const fightDuration = 20; 
+                                        // 修复 setInterval 的 window 前缀警告
+                                        const fightInterval = window.setInterval(() => {
+                                            const activeEl = leafDoc.activeElement as HTMLElement | null;
+                                            if (activeEl && leaf.view.containerEl.contains(activeEl)) {
+                                                activeEl.blur();
+                                            }
+                                            
+                                            if (leaf.view.currentMode && leaf.view.currentMode.applyScroll) {
+                                                leaf.view.currentMode.applyScroll(saved);
+                                            }
+                                            
+                                            if (Date.now() - startTime >= fightDuration) { 
+                                                window.clearInterval(fightInterval);
+                                                restoreUI();
+                                            }
+                                        }, 5);
+
+                                        // 绝对保底机制
+                                        window.setTimeout(() => {
+                                            window.clearInterval(fightInterval);
+                                            restoreUI();
+                                        }, 200);
+                                    }
+
+                                } else {
+                                    restoreUI();
+                                }
+
+                                return result;
+
+                            } catch (error) {
+                                restoreUI();
+                                throw error; 
+                            }
+                        }
+                    }
+                    return next.call(this, state, eState);
+                };
+            }
+        });
+
+        plugin.register(unpatch);
+    }
+
+    async loadAndCleanData(): Promise<void> {
         const loadedData = (await this.loadData()) || {};
         this.data = Object.assign({}, loadedData);
 
         this.app.workspace.onLayoutReady(() => {
             let isDirty = false;
-            const existingPaths = new Set(this.app.vault.getFiles().map(f => f.path));
             
+            // 修复 Vault Enumeration 性能建议：
+            // 不再扫描全库文件 (vault.getFiles)，改为按需验证 data 中的文件是否仍存在
             for (const path in this.data) {
-                if (!existingPaths.has(path)) {
+                const abstractFile = this.app.vault.getAbstractFileByPath(path);
+                if (!(abstractFile instanceof TFile)) {
                     delete this.data[path];
                     isDirty = true;
                 }
             }
             
             if (isDirty) {
-                this.saveData(this.data);
+                void this.saveData(this.data);
                 console.log('Simply Scroll: Cleaned up orphaned scroll data.');
             }
         });
     }
 
-    async onunload() {
-        // 清理注入的 CSS
-        const styleEl = document.getElementById('simply-scroll-cursor-hider');
-        if (styleEl) styleEl.remove();
-
-        if (this.requestDiskSave && (this.requestDiskSave as any).cancel) {
-            (this.requestDiskSave as any).cancel();
+    // 修复 unload 生命周期返回值类型异常
+    onunload(): void {
+        const debouncer = this.requestDiskSave as unknown as CancelableDebounce;
+        if (debouncer && typeof debouncer.cancel === 'function') {
+            debouncer.cancel();
         }
-        await this.saveData(this.data);
+        
+        // 生命周期内结束不需 await
+        void this.saveData(this.data);
         console.log('Simply Scroll Unloaded');
     }
 }

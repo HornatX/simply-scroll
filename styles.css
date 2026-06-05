@@ -1,0 +1,26 @@
+/* ============================================================================ */
+/* Simply Scroll 插件样式表                                                      */
+/* ============================================================================ */
+
+/* 隐身斗篷：隐藏光标与选区 */
+.simply-scroll-cloaked .cm-cursorLayer,
+.simply-scroll-cloaked .cm-selectionLayer {
+    display: none ;
+    opacity: 0 ;
+}
+
+.simply-scroll-cloaked {
+    caret-color: transparent ;
+}
+
+/* 核心动画状态：隐藏期 */
+.simply-scroll-hiding {
+    transition: none ;
+    opacity: 0 ;
+}
+
+/* 核心动画状态：恢复期 */
+.simply-scroll-showing {
+    transition: opacity 0.05s ease-out ;
+    opacity: 1 ;
+}

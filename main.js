@@ -25,13 +25,16 @@ module.exports = __toCommonJS(main_exports);
 var import_obsidian = require("obsidian");
 function around(obj, factories) {
   const removers = Object.keys(factories).map((key) => {
-    const original = obj[key];
-    const factory = factories[key];
+    const k = key;
+    const original = obj[k];
+    const factory = factories[k];
+    if (!factory) return () => {
+    };
     const wrapped = factory(original);
-    wrapped && (wrapped.container = original);
-    obj[key] = wrapped;
+    wrapped.container = original;
+    obj[k] = wrapped;
     return () => {
-      if (obj[key] === wrapped) obj[key] = original;
+      if (obj[k] === wrapped) obj[k] = original;
     };
   });
   return () => removers.forEach((r) => r());
@@ -46,123 +49,12 @@ var SimplyScrollPlugin = class extends import_obsidian.Plugin {
   }
   async onload() {
     await this.loadAndCleanData();
-    const plugin = this;
     this.app.workspace.onLayoutReady(() => {
       this.isAppReady = true;
     });
-    const styleEl = document.createElement("style");
-    styleEl.id = "simply-scroll-cursor-hider";
-    styleEl.textContent = `
-            .simply-scroll-cloaked .cm-cursorLayer,
-            .simply-scroll-cloaked .cm-selectionLayer {
-                display: none !important;
-                opacity: 0 !important;
-            }
-            .simply-scroll-cloaked {
-                caret-color: transparent !important;
-            }
-        `;
-    document.head.appendChild(styleEl);
-    const unpatch = around(import_obsidian.WorkspaceLeaf.prototype, {
-      setViewState(next) {
-        return async function(state, eState) {
-          if (state.type === "markdown" && state.state?.file) {
-            const path = state.state.file;
-            const saved = plugin.data[path];
-            if (saved > 0 && (!state.state || !state.state.subpath)) {
-              const leaf = this;
-              eState = Object.assign({}, eState || {});
-              eState.scroll = saved;
-              delete eState.line;
-              delete eState.cursor;
-              eState.focus = false;
-              const contentEl = leaf.view?.contentEl;
-              let isCloaked = false;
-              if (contentEl) {
-                contentEl.style.transition = "none";
-                contentEl.style.opacity = "0";
-                leaf.view.containerEl.classList.add("simply-scroll-cloaked");
-                isCloaked = true;
-              }
-              const restoreUI = () => {
-                if (!isCloaked) return;
-                isCloaked = false;
-                if (leaf.view?.contentEl) {
-                  leaf.view.containerEl.classList.remove("simply-scroll-cloaked");
-                  leaf.view.contentEl.style.transition = "opacity 0.05s ease-out";
-                  leaf.view.contentEl.style.opacity = "1";
-                  setTimeout(() => {
-                    if (leaf.view?.contentEl?.style.opacity === "1") {
-                      leaf.view.contentEl.style.transition = "";
-                      leaf.view.contentEl.style.opacity = "";
-                    }
-                  }, 100);
-                }
-              };
-              try {
-                const result = await next.call(this, state, eState);
-                if (contentEl) {
-                  const startTime = Date.now();
-                  if (!plugin.isAppReady) {
-                    const fightDuration = 600;
-                    let animationFrameId;
-                    const fightLoop = () => {
-                      const elapsed = Date.now() - startTime;
-                      const activeEl = document.activeElement;
-                      if (activeEl && leaf.view.containerEl.contains(activeEl)) {
-                        activeEl.blur();
-                      }
-                      if (leaf.view.currentMode && leaf.view.currentMode.applyScroll) {
-                        leaf.view.currentMode.applyScroll(saved);
-                      }
-                      if (elapsed < fightDuration) {
-                        animationFrameId = requestAnimationFrame(fightLoop);
-                      } else {
-                        if (leaf.view.currentMode && leaf.view.currentMode.applyScroll) {
-                          leaf.view.currentMode.applyScroll(saved);
-                        }
-                        cancelAnimationFrame(animationFrameId);
-                        restoreUI();
-                      }
-                    };
-                    animationFrameId = requestAnimationFrame(fightLoop);
-                  } else {
-                    const fightDuration = 20;
-                    const fightInterval = setInterval(() => {
-                      const activeEl = document.activeElement;
-                      if (activeEl && leaf.view.containerEl.contains(activeEl)) {
-                        activeEl.blur();
-                      }
-                      if (leaf.view.currentMode && leaf.view.currentMode.applyScroll) {
-                        leaf.view.currentMode.applyScroll(saved);
-                      }
-                      if (Date.now() - startTime >= fightDuration) {
-                        clearInterval(fightInterval);
-                        restoreUI();
-                      }
-                    }, 5);
-                    setTimeout(() => {
-                      clearInterval(fightInterval);
-                      restoreUI();
-                    }, 200);
-                  }
-                } else {
-                  restoreUI();
-                }
-                return result;
-              } catch (error) {
-                restoreUI();
-                throw error;
-              }
-            }
-          }
-          return next.call(this, state, eState);
-        };
-      }
-    });
-    this.register(unpatch);
+    this.setupMonkeyPatch(this);
     this.requestDiskSave = (0, import_obsidian.debounce)(() => {
-      this.saveData(this.data);
+      void this.saveData(this.data);
     }, 2e3);
     this.registerDomEvent(window, "scroll", (e) => {
       const target = e.target;
@@ -192,7 +84,7 @@ var SimplyScrollPlugin = class extends import_obsidian.Plugin {
     }, true);
     this.registerEvent(
       this.app.workspace.on("active-leaf-change", () => {
-        this.saveData(this.data);
+        void this.saveData(this.data);
       })
     );
     this.registerEvent(
@@ -200,7 +92,7 @@ var SimplyScrollPlugin = class extends import_obsidian.Plugin {
         if (file instanceof import_obsidian.TFile && this.data[oldPath] !== void 0) {
           this.data[file.path] = this.data[oldPath];
           delete this.data[oldPath];
-          this.saveData(this.data);
+          void this.saveData(this.data);
         }
       })
     );
@@ -208,36 +100,136 @@ var SimplyScrollPlugin = class extends import_obsidian.Plugin {
       this.app.vault.on("delete", (file) => {
         if (file instanceof import_obsidian.TFile && this.data[file.path] !== void 0) {
           delete this.data[file.path];
-          this.saveData(this.data);
+          void this.saveData(this.data);
         }
       })
     );
+  }
+  setupMonkeyPatch(plugin) {
+    const unpatch = around(import_obsidian.WorkspaceLeaf.prototype, {
+      setViewState(next) {
+        return async function(state, eState) {
+          if (state.type === "markdown" && state.state?.file) {
+            const path = state.state.file;
+            const saved = plugin.data[path];
+            if (typeof saved === "number" && saved > 0 && (!state.state || !state.state.subpath)) {
+              const leaf = this;
+              const modState = Object.assign({}, eState || {});
+              modState.scroll = saved;
+              delete modState.line;
+              delete modState.cursor;
+              modState.focus = false;
+              const contentEl = leaf.view?.contentEl;
+              let isCloaked = false;
+              if (contentEl) {
+                contentEl.classList.remove("simply-scroll-showing");
+                contentEl.classList.add("simply-scroll-hiding");
+                leaf.view.containerEl.classList.add("simply-scroll-cloaked");
+                isCloaked = true;
+              }
+              const restoreUI = () => {
+                if (!isCloaked) return;
+                isCloaked = false;
+                if (leaf.view?.contentEl) {
+                  leaf.view.containerEl.classList.remove("simply-scroll-cloaked");
+                  leaf.view.contentEl.classList.remove("simply-scroll-hiding");
+                  leaf.view.contentEl.classList.add("simply-scroll-showing");
+                  window.setTimeout(() => {
+                    if (leaf.view?.contentEl) {
+                      leaf.view.contentEl.classList.remove("simply-scroll-showing");
+                    }
+                  }, 100);
+                }
+              };
+              try {
+                const result = await next.call(this, state, modState);
+                if (contentEl) {
+                  const startTime = Date.now();
+                  const leafDoc = leaf.view.containerEl.ownerDocument;
+                  if (!plugin.isAppReady) {
+                    const fightDuration = 600;
+                    let animationFrameId;
+                    const fightLoop = () => {
+                      const elapsed = Date.now() - startTime;
+                      const activeEl = leafDoc.activeElement;
+                      if (activeEl && leaf.view.containerEl.contains(activeEl)) {
+                        activeEl.blur();
+                      }
+                      if (leaf.view.currentMode && leaf.view.currentMode.applyScroll) {
+                        leaf.view.currentMode.applyScroll(saved);
+                      }
+                      if (elapsed < fightDuration) {
+                        animationFrameId = window.requestAnimationFrame(fightLoop);
+                      } else {
+                        if (leaf.view.currentMode && leaf.view.currentMode.applyScroll) {
+                          leaf.view.currentMode.applyScroll(saved);
+                        }
+                        window.cancelAnimationFrame(animationFrameId);
+                        restoreUI();
+                      }
+                    };
+                    animationFrameId = window.requestAnimationFrame(fightLoop);
+                  } else {
+                    const fightDuration = 20;
+                    const fightInterval = window.setInterval(() => {
+                      const activeEl = leafDoc.activeElement;
+                      if (activeEl && leaf.view.containerEl.contains(activeEl)) {
+                        activeEl.blur();
+                      }
+                      if (leaf.view.currentMode && leaf.view.currentMode.applyScroll) {
+                        leaf.view.currentMode.applyScroll(saved);
+                      }
+                      if (Date.now() - startTime >= fightDuration) {
+                        window.clearInterval(fightInterval);
+                        restoreUI();
+                      }
+                    }, 5);
+                    window.setTimeout(() => {
+                      window.clearInterval(fightInterval);
+                      restoreUI();
+                    }, 200);
+                  }
+                } else {
+                  restoreUI();
+                }
+                return result;
+              } catch (error) {
+                restoreUI();
+                throw error;
+              }
+            }
+          }
+          return next.call(this, state, eState);
+        };
+      }
+    });
+    plugin.register(unpatch);
   }
   async loadAndCleanData() {
     const loadedData = await this.loadData() || {};
     this.data = Object.assign({}, loadedData);
     this.app.workspace.onLayoutReady(() => {
       let isDirty = false;
-      const existingPaths = new Set(this.app.vault.getFiles().map((f) => f.path));
       for (const path in this.data) {
-        if (!existingPaths.has(path)) {
+        const abstractFile = this.app.vault.getAbstractFileByPath(path);
+        if (!(abstractFile instanceof import_obsidian.TFile)) {
           delete this.data[path];
           isDirty = true;
         }
       }
       if (isDirty) {
-        this.saveData(this.data);
+        void this.saveData(this.data);
         console.log("Simply Scroll: Cleaned up orphaned scroll data.");
       }
     });
   }
-  async onunload() {
-    const styleEl = document.getElementById("simply-scroll-cursor-hider");
-    if (styleEl) styleEl.remove();
-    if (this.requestDiskSave && this.requestDiskSave.cancel) {
-      this.requestDiskSave.cancel();
+  // 修复 unload 生命周期返回值类型异常
+  onunload() {
+    const debouncer = this.requestDiskSave;
+    if (debouncer && typeof debouncer.cancel === "function") {
+      debouncer.cancel();
     }
-    await this.saveData(this.data);
+    void this.saveData(this.data);
     console.log("Simply Scroll Unloaded");
   }
 };
