@@ -1,7 +1,7 @@
 {
   "scripts": {
-    "build": "esbuild main.ts --bundle --external:obsidian --external:electron --external:@codemirror/state --external:@codemirror/view --outfile=main.js --format=cjs --platform=node",
-    "postbuild": "powershell -ExecutionPolicy Bypass -File \"Z:/kaifa/整体.ps1\""
+    "build": "esbuild src/main.ts --bundle --external:obsidian --external:electron --external:@codemirror/state --external:@codemirror/view --outfile=main.js --format=cjs --platform=node",
+    "postbuild": "powershell -ExecutionPolicy Bypass -File \"./整体.ps1\""
   },
   "devDependencies": {
     "@codemirror/state": "^6.5.0",

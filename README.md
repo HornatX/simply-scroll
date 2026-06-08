@@ -1,97 +1,109 @@
-# Simply Scroll (记住阅读位置,切换文件滚轮位置记忆)
+# ✦ 滚轮位置记忆 ✦
 
-如果您觉得这款插件对您有帮助，欢迎在小红书（RED）上关注我，我会在那里分享更多技巧、教程和更新。
+<a href="https://www.xiaohongshu.com/user/profile/6353523d000000001802f8ae?xsec_token=YB4vLkLfzOijtg8c1Vh12ZASaI1ByqPPYi82ZzKbG72qE=&xsec_source=app_share&xhsshare=QQ&appuid=6353523d000000001802f8ae&apptime=1780631605&share_id=3846902afcd94e2ab78467cd7b9b5669" target="_blank"><img src="https://img.shields.io/badge/✦_关注小红书-ff2442?style=for-the-badge&logo=xiaohongshu&logoColor=white" alt="关注小红书" height="40" style="border-radius: 8px; box-shadow: 0 2px 4px rgba(33, 31, 32, 0.84);"></a>
 
-If you find this plugin helpful, feel free to follow me on Xiaohongshu (RED) where I share more tips, tutorials, and updates.
+我在小红书发布了许多obsidian的教程和插件开发进度，你的关注就是对我最大的支持
 
-https://www.xiaohongshu.com/user/profile/6353523d000000001802f8ae?xsec_token=YB4vLkLfzOijtg8c1Vh12ZASaI1ByqPPYi82ZzKbG72qE=&xsec_source=app_share&xhsshare=QQ&appuid=6353523d000000001802f8ae&apptime=1780631605&share_id=3846902afcd94e2ab78467cd7b9b5669
+<p align="center">
+  <img src="assets/滚轮演示.gif" alt="滚轮演示" />
+</p>
 
-Simply Scroll is a lightweight scroll state preservation plugin for Obsidian. It restores your exact reading scroll position when switching between Markdown files with **zero layout shifting, zero focus fighting, and absolutely zero visual flashing**.
-
-插件还在测试当中,如果有bug或错误,加群讨论
-QQ交流群:1094620986
-
-[简体中文说明](#简体中文)
-
----
-
-## 🌟 Key Features
-
-### 1. Seamless Scroll Recovery
-- Remembers where you left off. When you switch back to any Markdown document, it instantly takes you back to your last scrolled position (reading or editing view).
-
-### 2. Zero-Flash UI Cloaking (Anti-Flicker)
-- **The Problem**: Standard Obsidian often briefly displays the top of the file, then violently jumps to the saved scroll position, causing an annoying white/dark flash.
-- **The Solution**: Simply Scroll temporarily sets the transition to `none` and cloaks the editor opacity to `0` during view states. It then gracefully fades the fully positioned editor back in (`opacity: 1`) via a fast 50ms transition, creating a seamless, flicker-free visual experience.
-
-### 3. Anti-Shift Focus Protection
-- Restoring scroll positions often fights with editor cursor autofocus, causing layout shifting on load. 
-- This plugin continuously blurs aggressive focus elements and enforces precise scroll offsets within a critical 40ms "fight window," ensuring your document stays perfectly still on load.
-
-### 4. Smart Self-Cleaning & Vault Sync
-- **Vault Rename/Delete Tracking**: Automatically updates saved scroll keys when a file is renamed, and discards data when a file is deleted.
-- **Orphan Cleanup**: On startup, it scans your vault and automatically purges saved scroll states of files that no longer exist, keeping your plugin data lightweight and clean.
-
----
-
-## ⚙️ How It Works (Technical Overview)
-
-Simply Scroll monkey-patches (`around`) `WorkspaceLeaf.prototype.setViewState` to intercept Markdown state transitions. When a leaf changes, it calculates the target viewport, applies a micro-cloaking mask to hide calculation jumps, stabilizes the view scrolling via a debounced micro-interval, and then reveals the fully settled interface.
-
----
-
-## 📥 Installation
-
-### Method 1: Community Plugins (Recommended)
-Once listed on the community store, you can install it directly:
-1. Go to **Settings** > **Community plugins** > **Browse**.
-2. Search for `Simply Scroll`.
-3. Click **Install**, then **Enable**.
-
-### Method 2: Manual Installation
-1. Download the latest release (`main.js` and `manifest.json`) from the [Releases](https://github.com/hornatx/simply-scroll/releases) page.
-2. Open your Obsidian vault directory in your file manager.
-3. Move the files to `<your-vault>/.obsidian/plugins/simply-scroll/`.
-4. Open Obsidian **Settings** > **Community plugins**, and turn on **Simply Scroll**.
+[简体中文](#简体中文) | [用法](#用法)
 
 ---
 
 ## 简体中文
 
-**Simply Scroll（极简无缝滚动恢复）** 是一款为 Obsidian 打造的无感滚动位置记忆插件。它在切换 Markdown 文档时，能以**零画面抖动、零焦点夺取、零视觉闪烁**的方式，完美恢复您上一次的阅读或编辑视口。
+### Examples 快速示例
 
----
+**1、无缝滚动恢复**
 
-## 🌟 核心功能
+切换回任何 Markdown 文档时，瞬间恢复至上次停留的滚动位置，实现零闪烁、零跳动。
 
-### 1. 无感滚动恢复
-- 记住您的每一次停留。当您返回任何曾经阅读或编辑过的 Markdown 文档时，插件会瞬间恢复至上次停留的视口高度。
+**2、极简无缝遮罩**
 
-### 2. 极简无缝遮罩（解决晃眼闪烁）
-- **痛点**：Obsidian 原生在切换文件时，经常会短暂渲染文档顶部，再猛烈跳转至历史位置。这在夜间或高对比度主题下会造成极其刺眼的“白屏/画面闪烁”。
-- **解决办法**：插件在检测到视图切换时，会瞬时将编辑器不透明度（Opacity）设为 `0` 进行无感遮罩。待滚动目标定位稳妥后，再以 `50ms` 的极快淡入动效平滑呈现，带来如同单页应用般的丝滑视觉体验。
+解决 Obsidian 原生切换文件时的画面闪烁问题，带来单页应用般的丝滑体验。
 
-### 3. 抗位移焦点抑制
-- 原生的滚动恢复常常由于编辑器强行夺取焦点（Focus）或自动定位光标，导致页面加载完毕时产生二次跳动。
-- 插件在加载的前 `40毫秒` 黄金保护期内，会高频抑制异常焦点，并持续应用历史滚动高度，让页面在呈现的瞬间即处于绝对静止状态。
+**3、抗位移焦点抑制**
 
-### 4. 智能数据库自动清洗
-- **路径重命名/删除同步**：文件重命名时自动顺延滚动记忆，文件彻底删除时自动销毁对应数据。
-- **孤立数据清洗**：每次启动插件时，系统会自动对比当前的库文件，自动剔除那些由于库外删除等原因残留的无用滚动数据，防止配置文件冗余。
+防止编辑器自动夺取焦点导致的二次跳动，页面呈现瞬间即处于绝对静止状态。
 
----
+**4、智能数据库自动清洗**
 
-## 📥 安装方法
+自动同步文件重命名/删除，清理孤立数据，保持插件数据轻量整洁。
 
-### 方法一：社区插件安装（推荐）
+***
+
+### 核心功能
+
+#### 1. 无感滚动恢复 (Seamless Scroll Recovery)
+
+- **智能记忆**：记录每个文件的精确滚动位置，包括阅读视图和编辑视图。
+- **瞬间切换**：返回任何曾经阅读或编辑过的文档时，立即恢复至上次停留的视口高度。
+
+#### 2. 极简无缝遮罩 (Zero-Flash UI Cloaking)
+
+- **痛点解决**：Obsidian 原生切换文件时，常短暂渲染文档顶部再跳转至历史位置，造成刺眼的"白屏/画面闪烁"。
+- **技术方案**：检测视图切换时，瞬时将编辑器不透明度设为 `0` 进行无感遮罩。待滚动目标定位稳妥后，再以 `50ms` 极快淡入动效平滑呈现。
+
+#### 3. 抗位移焦点抑制 (Anti-Shift Focus Protection)
+
+- **焦点争夺抑制**：在加载的前 `40毫秒` 黄金保护期内，高频抑制异常焦点。
+- **精确定位**：持续应用历史滚动高度，让页面在呈现的瞬间即处于绝对静止状态。
+
+#### 4. 智能数据管理 (Smart Data Management)
+
+- **路径同步**：文件重命名时自动顺延滚动记忆，文件彻底删除时自动销毁对应数据。
+- **孤立清洗**：每次启动插件时，自动对比当前库文件，剔除残留的无效滚动数据，防止配置文件冗余。
+
+#### 5. 高性能架构 (Performance-Oriented Architecture)
+
+- **多重防抖机制**：滚动事件和文件操作均采用防抖控制器，合并多余计算，避免高频读写压力。
+- **轻量存储**：仅存储文件路径与滚动位置，数据结构简洁高效。
+
+***
+
+## 用法
+
+1. 安装插件后，无需任何配置即可开始工作。
+2. 在任何 Markdown 文件中滚动阅读或编辑，插件会自动记录滚动位置。
+3. 切换到其他文件后再次返回，滚动位置将自动恢复。
+4. 插件完全自动化运行，无需手动干预。
+
+***
+
+### 安装方法
+
+#### 方法一：社区插件安装（推荐）
+
 待插件通过审核并上架社区市场后：
 1. 打开 Obsidian **设置** > **社区插件** > **浏览**。
 2. 搜索并选择 `Simply Scroll`。
 3. 点击 **安装** 并选择 **启用**。
 
-### 方法二：手动安装
+#### 方法二：手动安装
+
 1. 前往 [Releases](https://github.com/hornatx/simply-scroll/releases) 页面下载最新的 `main.js` 和 `manifest.json` 文件。
 2. 打开您的 Obsidian 库所在的本地文件夹。
 3. 进入 `.obsidian/plugins/` 目录，并创建一个名为 `simply-scroll` 的文件夹。
 4. 将下载的两个文件放入该文件夹中。
 5. 在 Obsidian **设置** > **社区插件** 中重新加载并开启该插件。
+
+***
+
+### 赞赏支持
+
+<details>
+<summary>🎁 如果觉得有用，请作者喝杯咖啡</summary>
+
+<br>
+
+<p align="center">
+  <img src="assets/赞赏码.JPG" width="250" />
+</p>
+
+</details>
+
+***
+
+QQ 交流群：1094620986
