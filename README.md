@@ -9,7 +9,7 @@
   <img src="assets/滚轮演示.gif" alt="滚轮演示" />
 </p>
 
-[简体中文](#简体中文) | [用法](#用法)
+[简体中文](#简体中文) | [用法](#用法) | [English](#english) | [Usage](#usage)
 
 ---
 
@@ -78,3 +78,60 @@
 ***
 
 QQ 交流群：1094620986
+
+---
+
+## English
+
+**Simply Scroll** — A lightweight scroll state preservation plugin for Obsidian. It restores your exact reading scroll position when switching between Markdown files with **zero layout shifting, zero focus fighting, and absolutely zero visual flashing**.
+
+***
+
+### Features
+
+#### 1. Seamless Scroll Recovery
+Intelligently records scroll positions, instantly restores when switching files with zero flickering.
+
+#### 2. Minimal Seamless Cloaking
+Solves native file-switching screen flashing, providing silky single-page app experience.
+
+#### 3. Anti-Shift Focus Suppression
+Prevents secondary jumps from editor focus competition, page appears instantly static.
+
+#### 4. Smart Data Management
+Automatically syncs file renames/deletes, cleans orphaned data, keeps lightweight.
+
+#### 5. High-Performance Architecture
+Multiple debounce mechanisms, lightweight storage, efficient operation.
+
+***
+
+## Usage
+
+1. After installing the plugin, it works without any configuration.
+2. Scroll through any Markdown file for reading or editing, the plugin automatically records scroll positions.
+3. Switch to another file and return, the scroll position will be automatically restored.
+4. The plugin runs completely automatically without manual intervention.
+
+***
+
+### Installation
+
+#### Method 1: Community Plugins (Recommended)
+
+Once the plugin is reviewed and listed on the community marketplace:
+1. Open Obsidian **Settings** > **Community plugins** > **Browse**.
+2. Search for and select `Simply Scroll`.
+3. Click **Install** and then **Enable**.
+
+#### Method 2: Manual Installation
+
+1. Go to the [Releases](https://github.com/hornatx/simply-scroll/releases) page to download the latest `main.js` and `manifest.json` files.
+2. Open your Obsidian vault folder on your computer.
+3. Navigate to the `.obsidian/plugins/` directory and create a folder named `simply-scroll`.
+4. Place the downloaded files into this folder.
+5. Reload and enable the plugin in Obsidian **Settings** > **Community plugins**.
+
+***
+
+QQ Group: 1094620986
