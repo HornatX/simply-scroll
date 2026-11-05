@@ -170,7 +170,12 @@ export default class SimplyScrollPlugin extends Plugin {
                         const path = state.state.file as string;
                         const saved = plugin.data[path];
 
-                        if (typeof saved === 'number' && saved > 0 && (!state.state || !state.state.subpath)) {
+                        // Let Obsidian handle positioning for jump targets (links, search, history) and in-file navigation
+                        const es: EphemeralState = eState || {};
+                        const hasTarget = !!(state.state.subpath || es.subpath || es.line !== undefined || es.match || es.cursor || es.startLoc || es.endLoc || es.scroll !== undefined);
+                        const sameFile = this.view?.file?.path === path;
+
+                        if (typeof saved === 'number' && saved > 0 && !hasTarget && !sameFile) {
                             const leaf = this;
                             const modState: EphemeralState = Object.assign({}, eState || {}); 
                             modState.scroll = saved;
