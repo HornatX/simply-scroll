@@ -112,7 +112,10 @@ var SimplyScrollPlugin = class extends import_obsidian.Plugin {
           if (state.type === "markdown" && state.state?.file) {
             const path = state.state.file;
             const saved = plugin.data[path];
-            if (typeof saved === "number" && saved > 0 && (!state.state || !state.state.subpath)) {
+            const es = eState || {};
+            const hasTarget = !!(state.state.subpath || es.subpath || es.line !== void 0 || es.match || es.cursor || es.startLoc || es.endLoc || es.scroll !== void 0);
+            const sameFile = this.view?.file?.path === path;
+            if (typeof saved === "number" && saved > 0 && !hasTarget && !sameFile) {
               const leaf = this;
               const modState = Object.assign({}, eState || {});
               modState.scroll = saved;
